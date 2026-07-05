@@ -22,11 +22,13 @@ class ImmergasCoordinator(DataUpdateCoordinator):
         client: ImmergasClient,
         device_name: str,
         thing_id: str,
+        device_n: int,
         poll_interval: int,
     ) -> None:
         self.client      = client
         self.device_name = device_name
         self.thing_id    = thing_id
+        self.device_n    = device_n
 
         super().__init__(
             hass,
@@ -42,6 +44,7 @@ class ImmergasCoordinator(DataUpdateCoordinator):
                 self.client.get_status,
                 self.device_name,
                 self.thing_id,
+                self.device_n,
             )
         except ImmergasConnectionError as err:
             raise UpdateFailed(f"Errore comunicazione Immergas: {err}") from err

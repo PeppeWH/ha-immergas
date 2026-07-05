@@ -1,6 +1,8 @@
 """Integrazione Immergas Smartech Plus per Home Assistant."""
 from __future__ import annotations
 
+import logging
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_EMAIL
 from homeassistant.core import HomeAssistant
@@ -12,6 +14,8 @@ from .coordinator import ImmergasCoordinator
 CONF_TOKEN_A   = "token_a"
 CONF_TOKEN_B   = "token_b"
 CONF_PHPSESSID = "phpsessid"
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -32,16 +36,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     thing_id    = device["thing_id"]
     device_name = device["device_name"]
 
-    coordinator = ImmergasCoordinator(
-        hass, client, device_name, thing_id, interval
+    coordinators = []
+    for zone in devices:
+        coordinator = ImmergasCoordinator(
+            hass,
+            client,
+            zone["device_name"],
+            zone["thing_id"],
+            zone["device_n"],
+            interval,
+        )
+        await coordinator.async_config_entry_first_refresh()
+        coordinators.append(coordinator)
+
+    _LOGGER.debug(
+        "Immergas setup found %s gateway(s) and created %s zone coordinator(s)",
+        len({zone["thing_id"] for zone in devices}),
+        len(coordinators),
     )
-    await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        "coordinator": coordinator,
+        "coordinator": coordinators[0],
+        "coordinators": coordinators,
         "client":      client,
         "device_name": device_name,
         "thing_id":    thing_id,
+        "devices":     devices,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

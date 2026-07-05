@@ -1,6 +1,8 @@
 """Entità Climate per Immergas Smartech Plus."""
 from __future__ import annotations
 
+import logging
+
 from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityFeature,
@@ -15,6 +17,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import ImmergasCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 PRESET_INVERNO        = "Inverno"
 PRESET_ESTATE         = "Estate"
@@ -35,20 +39,28 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     data        = hass.data[DOMAIN][entry.entry_id]
-    coordinator = data["coordinator"]
+    coordinators = data["coordinators"]
     client      = data["client"]
-    device_name = data["device_name"]
-    thing_id    = data["thing_id"]
-    async_add_entities([
-        ImmergasClimate(coordinator, client, device_name, thing_id)
-    ])
+    entities = [
+        ImmergasClimate(coordinator, client)
+        for coordinator in coordinators
+    ]
+    _LOGGER.debug("Immergas climate platform adding %s climate entit(y/ies)", len(entities))
+    for entity in entities:
+        _LOGGER.debug(
+            "Immergas climate entity prepared: name=%s thing_id=%s device_n=%s unique_id=%s",
+            entity._device_name,
+            entity._thing_id,
+            entity._device_n,
+            entity.unique_id,
+        )
+    async_add_entities(entities)
 
 
 class ImmergasClimate(CoordinatorEntity, ClimateEntity):
     """Termostato Immergas Smartech Plus."""
 
     _attr_has_entity_name         = True
-    _attr_name                    = None
     _attr_temperature_unit        = UnitOfTemperature.CELSIUS
     _attr_hvac_modes              = [HVACMode.HEAT, HVACMode.AUTO]
     _attr_supported_features      = (
@@ -65,17 +77,24 @@ class ImmergasClimate(CoordinatorEntity, ClimateEntity):
     _attr_max_temp                = 30.0
     _attr_target_temperature_step = 0.5
 
-    def __init__(self, coordinator, client, device_name, thing_id):
+    def __init__(self, coordinator, client):
         super().__init__(coordinator)
         self._client      = client
-        self._device_name = device_name
-        self._thing_id    = thing_id
-        self._attr_unique_id = f"immergas_{thing_id}_climate"
+        self._device_name = coordinator.device_name
+        self._thing_id    = coordinator.thing_id
+        self._device_n    = coordinator.device_n
+        self._attr_name = self._device_name
+        self._attr_unique_id = (
+            f"immergas_{self._thing_id}_climate"
+            if self._device_n == 0
+            else f"immergas_{self._thing_id}_{self._device_n}"
+        )
         self._attr_device_info = {
-            "identifiers":  {(DOMAIN, thing_id)},
-            "name":         f"Immergas {device_name}",
+            "identifiers":  {(DOMAIN, f"{self._thing_id}_{self._device_n}")},
+            "name":         self._device_name,
             "manufacturer": "Immergas",
             "model":        "Smartech Plus",
+            "via_device":   (DOMAIN, self._thing_id),
         }
 
     @property
@@ -111,6 +130,7 @@ class ImmergasClimate(CoordinatorEntity, ClimateEntity):
             self._device_name,
             self._thing_id,
             temp,
+            self._device_n,
         )
         await self.coordinator.async_request_refresh()
 
@@ -121,6 +141,7 @@ class ImmergasClimate(CoordinatorEntity, ClimateEntity):
             self._device_name,
             self._thing_id,
             mode_int,
+            self._device_n,
         )
         await self.coordinator.async_request_refresh()
 
@@ -133,5 +154,7 @@ class ImmergasClimate(CoordinatorEntity, ClimateEntity):
             self._device_name,
             self._thing_id,
             str(boiler_mode),
+            45,
+            self._device_n,
         )
         await self.coordinator.async_request_refresh()
